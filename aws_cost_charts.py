@@ -34,10 +34,36 @@ class AWSCostAnalyzer:
         if profile_name:
             session = boto3.Session(profile_name=profile_name)
             self.cost_client = session.client('ce', region_name=region)
+            self.sts_client = session.client('sts', region_name=region)
         else:
             self.cost_client = boto3.client('ce', region_name=region)
+            self.sts_client = boto3.client('sts', region_name=region)
         
+        self.profile_name = profile_name
         self.cost_data = None
+        
+    def get_account_info(self) -> Dict[str, str]:
+        """
+        Get AWS account information including account number.
+        
+        Returns:
+            Dictionary with account info
+        """
+        try:
+            identity = self.sts_client.get_caller_identity()
+            account_id = identity.get('Account', 'Unknown')
+            profile_display = self.profile_name if self.profile_name else 'default'
+            
+            return {
+                'account_id': account_id,
+                'profile_name': profile_display
+            }
+        except Exception as e:
+            print(f"Warning: Could not retrieve account info: {str(e)}")
+            return {
+                'account_id': 'Unknown',
+                'profile_name': self.profile_name if self.profile_name else 'default'
+            }
         
     def get_daily_costs(self, 
                        start_date: str, 
@@ -157,8 +183,12 @@ class AWSCostAnalyzer:
                       label=purchase_type, color=color, alpha=0.8)
                 bottom += df[purchase_type]
         
+        # Get account info for title
+        account_info = self.get_account_info()
+        title = f"AWS EC2 Daily Costs by Purchase Type\nProfile: {account_info['profile_name']} | Account: {account_info['account_id']}"
+        
         # Customize the chart
-        ax.set_title('AWS EC2 Daily Costs by Purchase Type', fontsize=16, fontweight='bold', pad=20)
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
         ax.set_xlabel('Date', fontsize=12)
         ax.set_ylabel('Cost ($)', fontsize=12)
         
@@ -225,13 +255,17 @@ class AWSCostAnalyzer:
                                  '<extra></extra>'
                 ))
         
+        # Get account info for title
+        account_info = self.get_account_info()
+        title_text = f"AWS EC2 Daily Costs by Purchase Type<br>Profile: {account_info['profile_name']} | Account: {account_info['account_id']}"
+        
         # Update layout
         fig.update_layout(
             title={
-                'text': 'AWS EC2 Daily Costs by Purchase Type',
+                'text': title_text,
                 'x': 0.5,
                 'xanchor': 'center',
-                'font': {'size': 20}
+                'font': {'size': 18}
             },
             xaxis_title='Date',
             yaxis_title='Cost ($)',
