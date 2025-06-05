@@ -16,6 +16,7 @@ import plotly.express as px
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import json
+import argparse
 from typing import Dict, List, Optional
 
 
@@ -121,13 +122,14 @@ class AWSCostAnalyzer:
         
         return df_pivot
     
-    def create_matplotlib_chart(self, df: pd.DataFrame, save_path: str = 'aws_costs_matplotlib.png') -> None:
+    def create_matplotlib_chart(self, df: pd.DataFrame, save_path: str = 'aws_costs_matplotlib.png', headless: bool = False) -> None:
         """
         Create a stacked bar chart using matplotlib.
         
         Args:
             df: Processed cost DataFrame
             save_path: Path to save the chart
+            headless: If True, don't display the chart (just save)
         """
         # Set up the plot
         fig, ax = plt.subplots(figsize=(15, 8))
@@ -178,15 +180,20 @@ class AWSCostAnalyzer:
         
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Chart saved as {save_path}")
-        plt.show()
+        
+        if not headless:
+            plt.show()
+        else:
+            plt.close()  # Close the figure to free memory in headless mode
     
-    def create_plotly_chart(self, df: pd.DataFrame, save_path: str = 'aws_costs_plotly.html') -> None:
+    def create_plotly_chart(self, df: pd.DataFrame, save_path: str = 'aws_costs_plotly.html', headless: bool = False) -> None:
         """
         Create an interactive stacked bar chart using Plotly.
         
         Args:
             df: Processed cost DataFrame
             save_path: Path to save the HTML chart
+            headless: If True, don't open the chart in browser (just save)
         """
         # Get cost columns (excluding date and total)
         cost_columns = [col for col in df.columns if col not in ['date', 'total_cost']]
@@ -259,7 +266,9 @@ class AWSCostAnalyzer:
         # Save and show
         fig.write_html(save_path)
         print(f"Interactive chart saved as {save_path}")
-        fig.show()
+        
+        if not headless:
+            fig.show()
     
     def generate_summary_report(self, df: pd.DataFrame) -> None:
         """
@@ -303,12 +312,25 @@ class AWSCostAnalyzer:
 def main():
     """Main function to run the AWS cost analysis."""
     
-    # Initialize the analyzer
-    analyzer = AWSCostAnalyzer()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate AWS EC2 cost charts using Cost Explorer API')
+    parser.add_argument('--headless', action='store_true', 
+                        help='Run in headless mode (save charts without displaying)')
+    parser.add_argument('--profile', type=str, 
+                        help='AWS profile to use (default: default profile)')
+    parser.add_argument('--months', type=int, default=12,
+                        help='Number of months to analyze (default: 12)')
+    parser.add_argument('--output-prefix', type=str, default='aws_costs',
+                        help='Prefix for output files (default: aws_costs)')
     
-    # Define date range (last 12 months by default)
+    args = parser.parse_args()
+    
+    # Initialize the analyzer
+    analyzer = AWSCostAnalyzer(profile_name=args.profile)
+    
+    # Define date range
     end_date = datetime.now()
-    start_date = end_date - relativedelta(months=12)
+    start_date = end_date - relativedelta(months=args.months)
     
     start_date_str = start_date.strftime('%Y-%m-%d')
     end_date_str = end_date.strftime('%Y-%m-%d')
@@ -325,8 +347,16 @@ def main():
         
         # Create visualizations
         print("\nGenerating charts...")
-        analyzer.create_matplotlib_chart(df)
-        analyzer.create_plotly_chart(df)
+        
+        # Create output filenames
+        png_file = f"{args.output_prefix}_matplotlib.png"
+        html_file = f"{args.output_prefix}_plotly.html"
+        
+        analyzer.create_matplotlib_chart(df, png_file, headless=args.headless)
+        analyzer.create_plotly_chart(df, html_file, headless=args.headless)
+        
+        if args.headless:
+            print(f"\nHeadless mode: Charts saved to {png_file} and {html_file}")
         
         print("\nAnalysis complete!")
         
